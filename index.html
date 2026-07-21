@@ -372,6 +372,52 @@
             }
         };
 
+        window.submitEditItem = async function(event) {
+            event.preventDefault();
+            const btn = document.getElementById('submit-edit-btn');
+            const originalText = window.lockButton(btn);
+            
+            const formData = new FormData(event.target);
+            const fileInput = document.getElementById('item-image-edit');
+            const itemId = window.state.selectedItemId;
+            const currentItem = window.state.foundItems.find(i => i.id === itemId);
+
+            try {
+                let imageUrl = currentItem.image; // 預設保留舊圖片
+                if (fileInput.files.length > 0) {
+                    if (fileInput.files[0].size > 5 * 1024 * 1024) {
+                        window.showToast("圖片檔案過大 (超過 5MB)", "error");
+                        window.unlockButton(btn, originalText);
+                        return;
+                    }
+                    const file = fileInput.files[0];
+                    const storageRef = ref(storage, 'foundItems/' + Date.now() + '_' + file.name);
+                    await uploadBytes(storageRef, file);
+                    imageUrl = await getDownloadURL(storageRef);
+                }
+
+                let finalCategory = formData.get('categorySelect');
+                if (finalCategory === '其他') finalCategory = formData.get('customCategory') || '未分類';
+
+                await updateDoc(doc(db, "foundItems", itemId), {
+                    title: formData.get('title'), 
+                    category: finalCategory, 
+                    location: formData.get('location'), 
+                    date: formData.get('date'), 
+                    description: formData.get('description'), 
+                    hiddenFeature: formData.get('hiddenFeature'),
+                    image: imageUrl
+                });
+
+                window.showToast('✅ 資料更新成功！');
+                window.navigate('item_detail', itemId);
+            } catch(e) {
+                console.error(e);
+                window.showToast('更新失敗，請檢查權限', 'error');
+                window.unlockButton(btn, originalText);
+            }
+        };
+
         window.handleClaimAction = async function(event, itemId, param3 = null, param4 = null) {
             if (event && event.type === 'submit') event.preventDefault();
             const item = window.state.foundItems.find(i => i.id === itemId);
@@ -455,6 +501,12 @@
             const input = document.getElementById('custom-category-input');
             if(value === '其他') { container.style.display = 'block'; input.required = true; } 
             else { container.style.display = 'none'; input.required = false; input.value = ''; }
+        }
+        window.toggleCustomCategoryEdit = function(value) {
+            const container = document.getElementById('custom-category-container-edit');
+            const input = document.getElementById('custom-category-input-edit');
+            if(value === '其他') { container.style.display = 'block'; input.required = true; } 
+            else { container.style.display = 'none'; input.required = false; }
         }
 
         function renderFoundList() {
@@ -556,7 +608,7 @@
                     <div class="md:w-1/2 bg-slate-100 relative"><img src="${item.image}" alt="${item.title}" class="w-full h-full object-cover min-h-[300px]"><div class="absolute top-4 left-4 px-3 py-1 rounded-full text-sm font-bold shadow-md border ${statusColor}">${item.status}</div></div>
                     <div class="md:w-1/2 p-6 md:p-8 flex flex-col">
                         <div class="flex justify-between items-start mb-2"><h2 class="text-2xl font-black text-slate-800">${item.title}</h2>
-                        ${isAdmin ? `<button onclick="window.deleteItem(event, '${item.id}', '${item.title}')" class="text-slate-400 hover:text-red-600 bg-slate-50 hover:bg-red-50 p-2 rounded-lg transition" title="刪除此案件"><i class="fa-solid fa-trash"></i></button>` : ''}</div>
+                        ${isAdmin ? `<div class="flex gap-2"><button onclick="window.navigate('edit_item', '${item.id}')" class="text-slate-400 hover:text-blue-600 bg-slate-50 hover:bg-blue-50 w-9 h-9 flex items-center justify-center rounded-lg transition shadow-sm border border-slate-100" title="編輯此案件"><i class="fa-solid fa-pen"></i></button><button onclick="window.deleteItem(event, '${item.id}', '${item.title}')" class="text-slate-400 hover:text-red-600 bg-slate-50 hover:bg-red-50 w-9 h-9 flex items-center justify-center rounded-lg transition shadow-sm border border-slate-100" title="刪除此案件"><i class="fa-solid fa-trash"></i></button></div>` : ''}</div>
                         <p class="text-slate-500 text-sm mb-6 flex items-center gap-2"><i class="fa-solid fa-tag"></i> ${item.category}</p>
                         <div class="space-y-4 flex-grow mb-8">
                             <div class="bg-slate-50 p-4 rounded-xl border border-slate-100 grid grid-cols-2 gap-4 text-sm">
@@ -623,6 +675,54 @@
                             <div><label for="item-description" class="block text-sm font-bold text-slate-700 mb-1">公開描述 <span class="text-red-500">*</span></label><textarea id="item-description" name="description" required rows="2" class="w-full border rounded-lg px-4 py-2.5 text-base md:text-sm focus:ring-2 outline-none"></textarea></div>
                             <div><label for="item-hidden" class="block text-sm font-bold text-slate-700 mb-1 text-red-600">隱藏特徵 (防冒領專用) <span class="text-red-500">*</span></label><input type="text" id="item-hidden" name="hiddenFeature" required class="w-full border-red-200 bg-red-50 rounded-lg px-4 py-2.5 text-base md:text-sm focus:ring-2 focus:ring-red-500 outline-none"></div>
                             <button type="submit" id="submit-btn" class="w-full bg-emerald-600 text-white font-bold py-3 rounded-lg shadow-md hover:bg-emerald-700 transition mt-6">寫入資料庫</button>
+                        </form>
+                    </div>
+                </div>
+            </div>`;
+        }
+
+        function renderEditItem() {
+            if (window.state.activeRole !== 'admin') return `<div class="py-16 text-center"><h3 class="text-xl font-bold text-slate-600">權限不足</h3></div>`;
+            const item = window.state.foundItems.find(i => i.id === window.state.selectedItemId);
+            if (!item) return `<div class="text-center py-16 text-slate-500">找不到該物品，可能已被刪除。</div>`;
+
+            const isPredefinedCategory = ['3C電子','證件錢包','書籍文具','生活用品'].includes(item.category);
+
+            return `
+            <div class="max-w-3xl mx-auto px-4 py-8 fade-enter-active">
+                <button onclick="window.navigate('item_detail', '${item.id}')" class="mb-4 text-slate-500 hover:text-emerald-600 font-bold transition flex items-center gap-2 outline-none"><i class="fa-solid fa-arrow-left"></i> 取消編輯</button>
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div class="bg-blue-600 px-6 py-4 flex items-center gap-2"><i class="fa-solid fa-pen-to-square text-white"></i><h2 class="text-white text-xl font-bold">編輯拾獲物資料</h2></div>
+                    <div class="p-6">
+                        <form onsubmit="window.submitEditItem(event)" class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-bold text-slate-700 mb-1">物品照片 <span class="text-slate-400 font-normal text-xs ml-1">(若不更改請留空)</span></label>
+                                <div class="border-2 border-dashed border-slate-300 rounded-xl p-4 text-center hover:bg-slate-50 transition relative">
+                                    <input type="file" id="item-image-edit" accept="image/jpeg, image/png, image/webp" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onchange="const f=this.files[0]; if(f){ const reader = new FileReader(); reader.onload = function(e) { document.getElementById('image-preview-edit').src = e.target.result; }; reader.readAsDataURL(f); }">
+                                    <div id="preview-container-edit" class="relative w-full max-w-sm mx-auto h-48 rounded-lg overflow-hidden border border-slate-200 shadow-sm group">
+                                        <img id="image-preview-edit" src="${item.image}" class="w-full h-full object-cover">
+                                        <div class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"><span class="text-white font-bold"><i class="fa-solid fa-camera"></i> 點擊更換圖片</span></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div><label for="edit-title" class="block text-sm font-bold text-slate-700 mb-1">物品名稱 <span class="text-red-500">*</span></label><input type="text" id="edit-title" name="title" required value="${item.title}" class="w-full border rounded-lg px-4 py-2.5 text-base md:text-sm focus:ring-2 focus:ring-emerald-500 outline-none"></div>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div><label for="edit-location" class="block text-sm font-bold text-slate-700 mb-1">拾獲地點 <span class="text-red-500">*</span></label><input type="text" id="edit-location" name="location" required value="${item.location}" class="w-full border rounded-lg px-4 py-2.5 text-base md:text-sm focus:ring-2 focus:ring-emerald-500 outline-none"></div>
+                                <div><label for="edit-date" class="block text-sm font-bold text-slate-700 mb-1">拾獲日期 <span class="text-red-500">*</span></label><input type="date" id="edit-date" name="date" required value="${item.date}" class="w-full border rounded-lg px-4 py-2.5 text-base md:text-sm focus:ring-2 focus:ring-emerald-500 outline-none"></div>
+                            </div>
+                            <div><label for="edit-category" class="block text-sm font-bold text-slate-700 mb-1">物品分類 <span class="text-red-500">*</span></label>
+                                <select id="edit-category" name="categorySelect" required onchange="window.toggleCustomCategoryEdit(this.value)" class="w-full border rounded-lg px-4 py-2.5 text-base md:text-sm focus:ring-2 focus:ring-emerald-500 outline-none">
+                                    <option value="3C電子" ${item.category === '3C電子' ? 'selected' : ''}>3C電子</option>
+                                    <option value="證件錢包" ${item.category === '證件錢包' ? 'selected' : ''}>證件錢包</option>
+                                    <option value="書籍文具" ${item.category === '書籍文具' ? 'selected' : ''}>書籍文具</option>
+                                    <option value="生活用品" ${item.category === '生活用品' ? 'selected' : ''}>生活用品</option>
+                                    <option value="其他" ${!isPredefinedCategory ? 'selected' : ''}>其他 (自行填寫)</option>
+                                </select>
+                                <div id="custom-category-container-edit" style="display: ${!isPredefinedCategory ? 'block' : 'none'};" class="mt-2"><input type="text" id="custom-category-input-edit" name="customCategory" value="${!isPredefinedCategory ? item.category : ''}" ${!isPredefinedCategory ? 'required' : ''} class="w-full border border-emerald-300 bg-emerald-50 rounded-lg px-4 py-2.5 text-base md:text-sm outline-none"></div>
+                            </div>
+                            <div><label for="edit-description" class="block text-sm font-bold text-slate-700 mb-1">公開描述 <span class="text-red-500">*</span></label><textarea id="edit-description" name="description" required rows="2" class="w-full border rounded-lg px-4 py-2.5 text-base md:text-sm focus:ring-2 outline-none">${item.description}</textarea></div>
+                            <div><label for="edit-hidden" class="block text-sm font-bold text-slate-700 mb-1 text-red-600">隱藏特徵 (防冒領專用) <span class="text-red-500">*</span></label><input type="text" id="edit-hidden" name="hiddenFeature" required value="${item.hiddenFeature || ''}" class="w-full border-red-200 bg-red-50 rounded-lg px-4 py-2.5 text-base md:text-sm focus:ring-2 focus:ring-red-500 outline-none"></div>
+                            <button type="submit" id="submit-edit-btn" class="w-full bg-blue-600 text-white font-bold py-3 rounded-lg shadow-md hover:bg-blue-700 transition mt-6">儲存修改</button>
                         </form>
                     </div>
                 </div>
@@ -794,7 +894,7 @@
             } else if (window.state.isLoadingError) {
                 main.innerHTML = `<div class="py-24 text-center"><i class="fa-solid fa-wifi text-6xl text-slate-300 mb-4"></i><h3 class="text-xl font-bold text-slate-700 mb-2">資料連線失敗</h3><button onclick="window.loadDataFromCloud()" class="bg-slate-800 hover:bg-slate-900 transition text-white font-bold py-2.5 px-6 rounded-lg mt-4">重新連線</button></div>`;
             } else {
-                const views = { 'home': renderFoundList, 'add_item': renderAddItem, 'item_detail': renderItemDetail, 'admin_dashboard': renderAdminDashboard, 'lost_list': renderLostList, 'add_lost': renderAddLostItem, 'second_hand': renderSecondHandList };
+                const views = { 'home': renderFoundList, 'add_item': renderAddItem, 'item_detail': renderItemDetail, 'admin_dashboard': renderAdminDashboard, 'lost_list': renderLostList, 'add_lost': renderAddLostItem, 'second_hand': renderSecondHandList, 'edit_item': renderEditItem };
                 main.innerHTML = (views[window.state.currentView] || renderFoundList)();
             }
 
