@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>龍華科大數商尋物站 - 正式連線版</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+    <style>
+        html, body { max-width: 100vw; overflow-x: hidden; }
+        body { font-family: 'Inter', 'Noto Sans TC', sans-serif; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        details > summary { list-style: none; }
+        details > summary::-webkit-details-marker { display: none; }
+        input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; opacity: 0.6; transition: 0.2s; }
+        input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
+        .fade-enter { opacity: 0; transform: translateY(10px); }
+        .fade-enter-active { opacity: 1; transform: translateY(0); transition: opacity 300ms, transform 300ms; }
+        html { scroll-behavior: smooth; }
+        *:focus-visible { outline: 2px solid #10b981; outline-offset: 2px; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col pb-16 md:pb-0">
+
+    <div id="in-app-warning" class="hidden bg-red-600 text-white px-4 py-3.5 text-sm font-bold shadow-md relative z-50 transition-all">
+        <div class="max-w-6xl mx-auto flex items-start gap-3">
+            <i class="fa-solid fa-triangle-exclamation text-2xl mt-0.5 animate-pulse text-red-200"></i>
+            <div class="flex-grow">
+                <span class="block text-base mb-1">⚠️ 登入受限警告 (請在外部開啟)</span>
+                您目前正在使用通訊軟體的內部瀏覽器，這將導致無法順利登入。<br>
+                請點擊螢幕右上角 (或右下角) 的 <i class="fa-solid fa-ellipsis-vertical mx-1"></i> 選單，選擇 <span class="bg-black/20 px-1.5 py-0.5 rounded inline-block mt-1">在外部瀏覽器開啟 (Safari / Chrome)</span>。
+            </div>
+        </div>
+    </div>
+
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+        <div class="max-w-6xl mx-auto px-4 py-3 flex justify-between items-center">
+            <div class="flex items-center gap-3 cursor-pointer group" onclick="window.navigate('home')">
+                <div class="w-10 h-10 bg-emerald-600 rounded-xl flex items-center justify-center text-white text-lg font-black shadow-md shadow-emerald-200 group-hover:scale-105 transition-transform">L</div>
+                <div>
+                    <h1 class="text-lg font-bold tracking-tight text-slate-800 flex items-center gap-1">
+                        數商尋物站 <span class="text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-normal">龍華科大</span>
+                    </h1>
+                    <p class="text-xs text-slate-500 font-medium hidden sm:block">數位行銷系 專屬失物招領平台</p>
+                </div>
+            </div>
+            <div id="auth-container"></div>
+        </div>
+        <div class="border-t border-slate-100 bg-slate-50/50">
+            <div class="max-w-6xl mx-auto px-4" id="nav-container"></div>
+        </div>
+    </header>
+
+    <main id="main-content" class="flex-grow bg-slate-50 min-h-[calc(100vh-150px)]"></main>
+
+    <div id="system-toast" class="fixed bottom-4 right-4 px-6 py-3 rounded-xl shadow-lg transition-all duration-300 transform translate-y-10 opacity-0 pointer-events-none z-50"></div>
+
+    <button id="back-to-top" aria-label="回到網頁頂部" onclick="window.scrollTo({top:0, behavior:'smooth'})" class="fixed bottom-6 right-4 w-12 h-12 bg-slate-800 text-white rounded-full shadow-xl flex items-center justify-center transition-all duration-300 opacity-0 pointer-events-none z-40 hover:bg-slate-700 hover:scale-105 focus:ring-2 focus:ring-slate-400 outline-none">
+        <i class="fa-solid fa-arrow-up text-lg"></i>
+    </button>
+
+    <dialog id="confirm-dialog" class="bg-white rounded-2xl shadow-2xl border-0 p-0 backdrop:bg-slate-900/50 backdrop:backdrop-blur-sm max-w-sm w-[90%] md:w-full m-auto open:animate-[fade-in_0.2s_ease-out]">
+        <div class="p-6">
+            <div class="flex items-center gap-3 mb-4">
+                <div id="dialog-icon-bg" class="w-10 h-10 rounded-full flex items-center justify-center shrink-0">
+                    <i id="dialog-icon" class="fa-solid text-xl"></i>
+                </div>
+                <h3 id="dialog-title" class="text-xl font-bold text-slate-800">確認操作</h3>
+            </div>
+            <p id="dialog-message" class="text-slate-600 text-sm leading-relaxed mb-6 whitespace-pre-wrap"></p>
+            <div class="flex gap-3 justify-end">
+                <button id="dialog-cancel-btn" autofocus class="px-5 py-2.5 rounded-lg font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition focus:ring-2 focus:ring-slate-300 outline-none">取消</button>
+                <button id="dialog-confirm-btn" class="px-5 py-2.5 rounded-lg font-bold text-white transition shadow-sm focus:ring-2 focus:outline-none">確認</button>
+            </div>
+        </div>
+    </dialog>
+
+    <script type="module">
+        // 🔥 載入 Firebase 官方套件
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, collection, addDoc, updateDoc, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
+
+        // 🔥 使用您提供的金鑰
+        const firebaseConfig = {
+            apiKey: "AIzaSyBtmjplYHKk1ktkYPuJcs-xqKFdNjjpjfs",
+            authDomain: "k12-lhu-dmcb-lostfound.firebaseapp.com",
+            projectId: "k12-lhu-dmcb-lostfound",
+            storageBucket: "k12-lhu-dmcb-lostfound.firebasestorage.app",
+            messagingSenderId: "990329211600",
+            appId: "1:990329211600:web:2fda953d4c4f875ce7acd5",
+            measurementId: "G-CTFCTNHQSC"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const storage = getStorage(app);
+        const provider = new GoogleAuthProvider();
+
+        // 👑 系統管理員權限名單 (已為您正確寫入)
+        const ADMIN_EMAILS = [
+            'mindnodeai@gmail.com', 
+            'ishareping@gmail.com'
+        ];
+
+        window.state = {
+            isInitialLoading: true, isLoadingError: false,  
+            user: null, activeRole: 'student', currentView: 'home', selectedItemId: null,
+            filters: { keyword: '', category: '', status: '' },
+            foundItems: [], lostItems: []
+        };
+
+        // 監聽使用者登入狀態 (Realtime)
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                window.state.user = { uid: user.uid, email: user.email, displayName: user.displayName, photoURL: user.photoURL };
+                // 判斷是否為管理員
+                if (ADMIN_EMAILS.includes(user.email)) {
+                    window.state.activeRole = 'admin';
+                } else {
+                    window.state.activeRole = 'student';
+                }
+            } else {
+                window.state.user = null;
+                window.state.activeRole = 'student';
+            }
+            window.render();
+        });
+
+        window.lockButton = function(btn) {
+            if (!btn) return null;
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 處理中...';
+            btn.disabled = true;
+            btn.classList.add('opacity-70', 'cursor-not-allowed');
+            return originalText;
+        };
+
+        window.unlockButton = function(btn, originalText) {
+            if (!btn || !originalText) return;
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+            btn.classList.remove('opacity-70', 'cursor-not-allowed');
+        };
+
+        window.navigate = function(view, id = null) {
+            window.state.currentView = view;
+            window.state.selectedItemId = id;
+            window.render();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        };
+
+        window.showToast = function(message, type = 'success') {
+            const toastEl = document.getElementById('system-toast');
+            const isError = type === 'error';
+            toastEl.className = `fixed bottom-4 right-4 px-6 py-3 rounded-xl shadow-lg text-white font-bold transition-all duration-300 transform translate-y-0 opacity-100 z-50 flex items-center gap-2 ${isError ? 'bg-red-600' : 'bg-emerald-600'}`;
+            toastEl.setAttribute('role', isError ? 'alert' : 'status');
+            toastEl.innerHTML = isError ? `<i class="fa-solid fa-circle-exclamation"></i> <span>${message}</span>` : `<i class="fa-solid fa-circle-check"></i> <span>${message}</span>`;
+            setTimeout(() => { toastEl.className = "fixed bottom-4 right-4 px-6 py-3 rounded-xl transition-all duration-300 transform translate-y-10 opacity-0 pointer-events-none z-50"; }, 3000);
+        };
+
+        window.showConfirmDialog = function(title, message, confirmText, isDanger, onConfirm) {
+            const dialog = document.getElementById('confirm-dialog');
+            document.getElementById('dialog-title').innerText = title;
+            document.getElementById('dialog-message').innerText = message;
+            
+            const confirmBtn = document.getElementById('dialog-confirm-btn');
+            confirmBtn.innerText = confirmText;
+            
+            const iconBg = document.getElementById('dialog-icon-bg');
+            const icon = document.getElementById('dialog-icon');
+            
+            if (isDanger) {
+                confirmBtn.className = "px-5 py-2.5 rounded-lg font-bold text-white transition shadow-sm focus:ring-2 focus:outline-none bg-red-600 hover:bg-red-700 focus:ring-red-200";
+                iconBg.className = "w-10 h-10 rounded-full flex items-center justify-center shrink-0 bg-red-100 text-red-600";
+                icon.className = "fa-solid fa-triangle-exclamation text-xl";
+            } else {
+                confirmBtn.className = "px-5 py-2.5 rounded-lg font-bold text-white transition shadow-sm focus:ring-2 focus:outline-none bg-emerald-600 hover:bg-emerald-700 focus:ring-emerald-200";
+                iconBg.className = "w-10 h-10 rounded-full flex items-center justify-center shrink-0 bg-emerald-100 text-emerald-600";
+                icon.className = "fa-solid fa-circle-question text-xl";
+            }
+            
+            const cancelBtn = document.getElementById('dialog-cancel-btn');
+            const newConfirmBtn = confirmBtn.cloneNode(true);
+            confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+            const newCancelBtn = cancelBtn.cloneNode(true);
+            cancelBtn.parentNode.replaceChild(newCancelBtn, cancelBtn);
+            
+            newCancelBtn.onclick = () => dialog.close();
+            newConfirmBtn.onclick = () => { dialog.close(); onConfirm(); };
+            
+            dialog.showModal();
+            newCancelBtn.focus();
+        };
+
+        // ☁️ 連接真實資料庫 (即時監聽)
+        window.loadDataFromCloud = function() {
+            window.state.isInitialLoading = true;
+            window.render();
+            
+            try {
+                // 監聽拾獲物 (Found Items)
+                onSnapshot(collection(db, "foundItems"), (snapshot) => {
+                    const items = [];
+                    snapshot.forEach(doc => items.push({ id: doc.id, ...doc.data() }));
+                    window.state.foundItems = items.filter(item => item.status !== '已刪除').sort((a, b) => b.createdAt - a.createdAt);
+                    window.state.isInitialLoading = false;
+                    window.render();
+                }, (error) => {
+                    console.error("Firebase 讀取錯誤 (Found):", error);
+                    window.state.isLoadingError = true;
+                    window.state.isInitialLoading = false;
+                    window.render();
+                });
+
+                // 監聽遺失協尋 (Lost Items)
+                onSnapshot(collection(db, "lostItems"), (snapshot) => {
+                    const items = [];
+                    snapshot.forEach(doc => items.push({ id: doc.id, ...doc.data() }));
+                    window.state.lostItems = items.filter(item => item.status !== '已刪除').sort((a, b) => b.createdAt - a.createdAt);
+                    window.render();
+                }, (error) => {
+                    console.error("Firebase 讀取錯誤 (Lost):", error);
+                });
+
+            } catch (error) {
+                console.error("連線錯誤:", error);
+                window.state.isInitialLoading = false;
+                window.state.isLoadingError = true;
+                window.render();
+            }
+        };
+
+        // 🔐 真實 Google 登入
+        window.loginWithGoogle = async function() {
+            try {
+                await signInWithPopup(auth, provider);
+                window.showToast('✅ 登入成功');
+            } catch (error) {
+                console.error(error);
+                window.showToast('登入失敗，請重試', 'error');
+            }
+        };
+
+        window.logout = async function() {
+            try {
+                await signOut(auth);
+                window.showToast("👋 已成功登出");
+                window.navigate('home');
+            } catch (error) {
+                console.error(error);
+            }
+        };
+
+        // 🛡️ 軟刪除與資料庫更新邏輯
+        window.deleteItem = function(event, id, title) {
+            if (window.state.activeRole !== 'admin') return;
+            const btn = event ? event.currentTarget : null;
+            
+            window.showConfirmDialog('刪除拾獲物', `確定要刪除「${title}」嗎？\n此物品將從前台隱藏（軟刪除），以備系辦日後查驗。`, '確認刪除', true, async () => {
+                const originalText = window.lockButton(btn);
+                try {
+                    await updateDoc(doc(db, "foundItems", id), { status: '已刪除', deletedAt: Date.now() });
+                    window.showToast('🗑️ 失物已封存並從列表隱藏');
+                    window.navigate('home');
+                } catch(e) { window.showToast('刪除失敗', 'error'); window.unlockButton(btn, originalText); }
+            });
+        };
+
+        window.markItemClosed = function(event, id, title) {
+            if (window.state.activeRole !== 'admin') return;
+            const btn = event ? event.currentTarget : null;
+
+            window.showConfirmDialog('歸檔結案', `確認「${title}」已經交付失主，並要將狀態改為已結案嗎？\n結案後，案件將移入歷史紀錄。`, '確認結案', false, async () => {
+                const originalText = window.lockButton(btn);
+                try {
+                    await updateDoc(doc(db, "foundItems", id), { status: "已結案", closedAt: Date.now() });
+                    window.showToast('📦 物品已成功交付並歸檔結案！');
+                    window.navigate('home');
+                } catch(e) { window.showToast('結案失敗', 'error'); window.unlockButton(btn, originalText); }
+            });
+        };
+
+        window.deleteLostItem = function(event, id, title) {
+            if (window.state.activeRole !== 'admin') return;
+            const btn = event ? event.currentTarget : null;
+
+            window.showConfirmDialog('刪除協尋文', `確定要刪除「${title}」的協尋文章嗎？\n此動作不可逆。`, '確認刪除', true, async () => {
+                const originalText = window.lockButton(btn);
+                try {
+                    await updateDoc(doc(db, "lostItems", id), { status: '已刪除', deletedAt: Date.now() });
+                    window.showToast('🗑️ 協尋文章已刪除');
+                } catch(e) { window.showToast('刪除失敗', 'error'); window.unlockButton(btn, originalText); }
+            });
+        };
+
+        // 📤 真實新增與圖片上傳邏輯
+        window.submitNewItem = async function(event) {
+            event.preventDefault();
+            const btn = document.getElementById('submit-btn');
+            const originalText = window.lockButton(btn);
+            
+            const formData = new FormData(event.target);
+            const fileInput = document.getElementById('item-image');
+            
+            if (fileInput.files.length > 0 && fileInput.files[0].size > 5 * 1024 * 1024) {
+                window.showToast("圖片檔案過大 (超過 5MB)", "error");
+                window.unlockButton(btn, originalText);
+                return;
+            }
+
+            try {
+                let imageUrl = "https://placehold.co/500x300/e2e8f0/475569?text=No+Image";
+                if (fileInput.files.length > 0) {
+                    const file = fileInput.files[0];
+                    const storageRef = ref(storage, 'foundItems/' + Date.now() + '_' + file.name);
+                    await uploadBytes(storageRef, file);
+                    imageUrl = await getDownloadURL(storageRef);
+                }
+
+                let finalCategory = formData.get('categorySelect');
+                if (finalCategory === '其他') finalCategory = formData.get('customCategory') || '未分類';
+
+                await addDoc(collection(db, "foundItems"), {
+                    title: formData.get('title'), 
+                    category: finalCategory, 
+                    location: formData.get('location'), 
+                    date: formData.get('date'), 
+                    description: formData.get('description'), 
+                    hiddenFeature: formData.get('hiddenFeature'),
+                    status: "待認領", 
+                    image: imageUrl, 
+                    claimRequests: [],
+                    createdAt: Date.now()
+                });
+
+                window.showToast('✅ 成功寫入資料庫！');
+                window.navigate('home');
+            } catch(e) {
+                console.error(e);
+                window.showToast('寫入失敗，請檢查權限', 'error');
+                window.unlockButton(btn, originalText);
+            }
+        };
+
+        window.submitNewLostItem = async function(event) {
+            event.preventDefault();
+            const btn = document.getElementById('submit-lost-btn');
+            const originalText = window.lockButton(btn);
+            const formData = new FormData(event.target);
+            try {
+                await addDoc(collection(db, "lostItems"), {
+                    title: formData.get('title'),
+                    location: formData.get('location'),
+                    date: formData.get('date'),
+                    description: formData.get('description'),
+                    studentName: window.state.user.displayName,
+                    contact: formData.get('contact'),
+                    userId: window.state.user.uid,
+                    status: '協尋中',
+                    createdAt: Date.now()
+                });
+                window.showToast('📢 協尋發布成功！', 'success');
+                window.navigate('lost_list');
+            } catch(e) {
+                window.showToast('發布失敗', 'error');
+                window.unlockButton(btn, originalText);
+            }
+        };
+
+        window.handleClaimAction = async function(event, itemId, param3 = null, param4 = null) {
+            if (event && event.type === 'submit') event.preventDefault();
+            const item = window.state.foundItems.find(i => i.id === itemId);
+            if (!item) return;
+
+            let action = 'submit'; let reqId = null;
+            if (param4) { reqId = param3; action = param4; } 
+            else if (param3) { action = param3; }
+
+            let btn = null;
+            if (event && event.type === 'submit') btn = event.target.querySelector('button[type="submit"]');
+            else if (event && event.currentTarget) btn = event.currentTarget;
+
+            const processAction = async () => {
+                const originalText = window.lockButton(btn);
+                try {
+                    const itemRef = doc(db, "foundItems", itemId);
+                    
+                    if (action === 'submit') {
+                        const newReq = { 
+                            requestId: 'REQ-'+Date.now(), 
+                            studentName: window.state.user.displayName, 
+                            contact: new FormData(event.target).get('contact'), 
+                            answer: new FormData(event.target).get('answer'), 
+                            status: '待審核',
+                            userId: window.state.user.uid
+                        };
+                        const updatedRequests = item.claimRequests ? [...item.claimRequests, newReq] : [newReq];
+                        await updateDoc(itemRef, { status: "審核中", claimRequests: updatedRequests });
+                        window.showToast('✅ 申請已送出！請靜候系辦通知。');
+                        window.navigate('home');
+                    } else if (action === 'approve') {
+                        const updatedRequests = item.claimRequests.map(r => r.requestId === reqId ? {...r, status: '已核准'} : r);
+                        await updateDoc(itemRef, { status: "待領取", claimRequests: updatedRequests });
+                        window.showToast('✅ 已核准！狀態更新為「待領取」');
+                    } else if (action === 'reject') {
+                        const updatedRequests = item.claimRequests.map(r => r.requestId === reqId ? {...r, status: '已駁回'} : r);
+                        const pendingCount = updatedRequests.filter(r => r.status === '待審核').length;
+                        const newStatus = pendingCount === 0 ? "待認領" : item.status;
+                        await updateDoc(itemRef, { status: newStatus, claimRequests: updatedRequests });
+                        window.showToast('❌ 已駁回申請');
+                    }
+                } catch(e) { window.showToast('操作失敗', 'error'); window.unlockButton(btn, originalText); }
+            };
+
+            if (action === 'reject') {
+                const req = item.claimRequests.find(r => r.requestId === reqId);
+                window.showConfirmDialog('駁回申請', `確定要駁回 ${req ? req.studentName : '該學生'} 的領取申請嗎？\n該筆申請將被作廢。`, '確認駁回', true, processAction);
+            } else {
+                processAction();
+            }
+        };
+
+        window.markLostItemFound = async function(event, id) {
+            const btn = event ? event.currentTarget : null;
+            const originalText = window.lockButton(btn);
+            try {
+                await updateDoc(doc(db, "lostItems", id), { status: "已尋獲" });
+                window.showToast('🎉 太棒了！物品已結案！');
+            } catch(e) { window.showToast('操作失敗', 'error'); window.unlockButton(btn, originalText); }
+        };
+
+        window.requestSecondHand = async function(event, itemId) {
+            event.stopPropagation(); 
+            if (!window.state.user) { window.showToast('請先登入才能申請索取喔！', 'error'); return; }
+            const btn = event.currentTarget;
+            const originalText = window.lockButton(btn);
+            try {
+                const newReq = { requestId: 'ECO-'+Date.now(), studentName: window.state.user.displayName, userId: window.state.user.uid, status: '待審核' };
+                const item = window.state.foundItems.find(i => i.id === itemId);
+                const updatedRequests = item.claimRequests ? [...item.claimRequests, newReq] : [newReq];
+                await updateDoc(doc(db, "foundItems", itemId), { status: "審核中", claimRequests: updatedRequests });
+                window.showToast('✅ 二手索取申請已送出！請留意通知。');
+            } catch(e) { window.showToast('操作失敗', 'error'); window.unlockButton(btn, originalText); }
+        };
+
+        // --- 以下為 UI 渲染邏輯 (未更動) ---
+        window.updateFilters = function(type, value) { window.state.filters[type] = value; window.render(); };
+        window.toggleCustomCategory = function(value) {
+            const container = document.getElementById('custom-category-container');
+            const input = document.getElementById('custom-category-input');
+            if(value === '其他') { container.style.display = 'block'; input.required = true; } 
+            else { container.style.display = 'none'; input.required = false; input.value = ''; }
+        }
+
+        function renderFoundList() {
+            const keyword = window.state.filters.keyword.toLowerCase();
+            const category = window.state.filters.category;
+            const status = window.state.filters.status;
+            
+            const uniqueCategories = ['3C電子', '證件錢包', '書籍文具', '生活用品'];
+            window.state.foundItems.forEach(item => { if (item.category && !uniqueCategories.includes(item.category)) uniqueCategories.push(item.category); });
+            
+            let categoryOptionsHTML = '<option value="">所有分類</option>';
+            uniqueCategories.forEach(cat => { categoryOptionsHTML += `<option value="${cat}" ${category === cat ? 'selected' : ''}>${cat}</option>`; });
+
+            let filteredItems = window.state.foundItems.filter(item => {
+                const titleStr = item.title ? item.title.toLowerCase() : '';
+                const locStr = item.location ? item.location.toLowerCase() : '';
+                const descStr = item.description ? item.description.toLowerCase() : '';
+                const matchKeyword = !keyword || titleStr.includes(keyword) || locStr.includes(keyword) || descStr.includes(keyword);
+                const matchCategory = !category || item.category === category;
+                let matchStatus = false;
+                if (status === '') matchStatus = (item.status !== '已結案');
+                else if (status === 'all') matchStatus = true;
+                else matchStatus = (item.status === status);
+                return matchKeyword && matchCategory && matchStatus;
+            });
+
+            let listHTML = `
+            <div class="max-w-6xl mx-auto px-4 py-8 fade-enter-active">
+                <div class="mb-6"><h1 class="text-2xl md:text-3xl font-black text-slate-800">尋找失物</h1><p class="text-slate-500 text-sm mt-1">請輸入關鍵字，或使用分類篩選來尋找您的物品。</p></div>
+                <details class="mb-6 bg-blue-50 border border-blue-200 rounded-xl p-4 cursor-pointer group shadow-sm">
+                    <summary class="font-bold text-blue-800 flex justify-between items-center outline-none"><span class="flex items-center gap-2"><i class="fa-solid fa-circle-info text-blue-600"></i> 系統安全與二手贈送公告 (點擊展開)</span><i class="fa-solid fa-chevron-down text-blue-400 group-open:rotate-180 transition-transform duration-300"></i></summary>
+                    <div class="mt-4 text-sm text-blue-700 space-y-3 cursor-default pt-4 border-t border-blue-200/60">
+                        <p class="flex gap-2 items-start"><span class="bg-blue-200 text-blue-800 px-1.5 rounded text-xs mt-0.5 whitespace-nowrap">領取</span> 為保護同學財產，申請認領時需回答「物品隱藏特徵」。經審核通過後，憑學生證至系辦 F402 簽收。</p>
+                        <p class="flex gap-2 items-start"><span class="bg-emerald-200 text-emerald-800 px-1.5 rounded text-xs mt-0.5 whitespace-nowrap">永續</span> 保管超過 30 天無人認領之一般物品，將轉入 <a href="#" onclick="window.navigate('second_hand'); return false;" class="underline font-bold text-emerald-700 hover:text-emerald-800">二手贈送區</a>，全系皆可免費索取！</p>
+                    </div>
+                </details>
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 mb-6 flex flex-col md:flex-row gap-4 items-center">
+                    <div class="relative flex-grow w-full">
+                        <i class="fa-solid fa-search absolute left-4 top-3.5 text-slate-400"></i>
+                        <input type="text" id="search-keyword-input" placeholder="搜尋物品名稱、地點、特徵..." class="w-full bg-slate-50 border border-slate-200 rounded-lg pl-10 pr-4 py-3 text-base md:text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none transition-shadow" value="${window.state.filters.keyword}" oncompositionstart="window.isComposing = true;" oncompositionend="window.isComposing = false; window.updateFilters('keyword', this.value);" oninput="if(!window.isComposing) { clearTimeout(window.searchTimeout); window.searchTimeout = setTimeout(() => window.updateFilters('keyword', this.value), 300); }">
+                    </div>
+                    <div class="flex gap-2 w-full md:w-auto">
+                        <select class="bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 w-full md:w-auto text-base md:text-sm focus:ring-2 focus:ring-emerald-500 outline-none" onchange="window.updateFilters('category', this.value)">${categoryOptionsHTML}</select>
+                        <select class="bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 w-full md:w-auto text-base md:text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none" onchange="window.updateFilters('status', this.value)">
+                            <option value="">顯示處理中 (隱藏結案)</option><option value="待認領" ${status === '待認領' ? 'selected' : ''}>待認領</option><option value="審核中" ${status === '審核中' ? 'selected' : ''}>審核中</option><option value="待領取" ${status === '待領取' ? 'selected' : ''}>待領取</option><option value="已結案" ${status === '已結案' ? 'selected' : ''}>歷史紀錄 (已結案)</option><option value="all" ${status === 'all' ? 'selected' : ''}>顯示所有狀態</option>
+                        </select>
+                    </div>
+                </div>
+                <div aria-live="polite" class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 min-h-[32px] gap-3">
+                    <div class="text-sm text-slate-600 font-medium">共找到 <span class="font-bold text-emerald-600 text-lg mx-1">${filteredItems.length}</span> 筆失物</div>
+                    ${(keyword || category || (status && status !== '')) ? `<div class="flex flex-wrap items-center gap-2"><span class="text-xs text-slate-400 font-bold mr-1">已套用條件:</span>
+                        ${keyword ? `<button onclick="window.updateFilters('keyword', '')" class="group flex items-center gap-1.5 bg-white border border-slate-200 text-slate-600 px-3 py-1 rounded-full text-sm hover:bg-red-50 hover:text-red-600 transition shadow-sm"><span class="font-medium text-slate-400">關鍵字</span> ${keyword} <i class="fa-solid fa-times-circle text-slate-300"></i></button>` : ''}
+                        ${category ? `<button onclick="window.updateFilters('category', '')" class="group flex items-center gap-1.5 bg-white border border-slate-200 text-slate-600 px-3 py-1 rounded-full text-sm hover:bg-red-50 hover:text-red-600 transition shadow-sm"><span class="font-medium text-slate-400">分類</span> ${category} <i class="fa-solid fa-times-circle text-slate-300"></i></button>` : ''}
+                        ${status && status !== '' ? `<button onclick="window.updateFilters('status', '')" class="group flex items-center gap-1.5 bg-white border border-slate-200 text-slate-600 px-3 py-1 rounded-full text-sm hover:bg-red-50 hover:text-red-600 transition shadow-sm"><span class="font-medium text-slate-400">狀態</span> ${status === 'all' ? '全部' : status} <i class="fa-solid fa-times-circle text-slate-300"></i></button>` : ''}
+                        <button onclick="window.updateFilters('keyword', ''); window.updateFilters('category', ''); window.updateFilters('status', '');" class="text-sm text-slate-500 hover:text-red-600 underline ml-2 transition">清除全部</button>
+                    </div>` : '<div></div>'}
+                </div>
+            `;
+
+            if (window.state.foundItems.length === 0) return listHTML + `<div class="py-16 text-center bg-white rounded-xl shadow-sm border border-slate-200"><i class="fa-solid fa-box-open text-6xl text-slate-200 mb-4"></i><h3 class="text-xl font-bold text-slate-600">目前系統中沒有任何拾獲紀錄</h3></div></div>`;
+            else if (filteredItems.length === 0) return listHTML + `<div class="py-16 text-center bg-white rounded-xl shadow-sm border border-slate-200 border-dashed"><i class="fa-solid fa-magnifying-glass text-6xl text-slate-200 mb-4"></i><h3 class="text-xl font-bold text-slate-600">找不到符合條件的失物</h3><button onclick="window.updateFilters('keyword', ''); window.updateFilters('category', ''); window.updateFilters('status', '');" class="mt-4 bg-emerald-50 text-emerald-600 px-6 py-2 rounded-lg font-bold border border-emerald-200 hover:bg-emerald-100 transition">清除所有篩選條件</button></div></div>`;
+
+            listHTML += `<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">`;
+            filteredItems.forEach(item => {
+                let statusColor = "bg-amber-100 text-amber-800";
+                if (item.status === "審核中") statusColor = "bg-blue-100 text-blue-800";
+                if (item.status === "待領取") statusColor = "bg-green-100 text-green-800";
+                if (item.status === "已結案") statusColor = "bg-slate-200 text-slate-600 opacity-80";
+                listHTML += `
+                <div onclick="window.navigate('item_detail', '${item.id}')" class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-lg transition cursor-pointer group flex flex-col h-full transform hover:-translate-y-1 ${item.status === '已結案' ? 'opacity-70 grayscale-[30%]' : ''}">
+                    <div class="h-48 overflow-hidden relative bg-slate-100">
+                        <img src="${item.image}" alt="${item.title}" class="w-full h-full object-cover group-hover:scale-105 transition duration-500">
+                        <div class="absolute top-3 right-3 px-3 py-1 rounded-full text-xs font-bold shadow-sm ${statusColor}">${item.status}</div>
+                    </div>
+                    <div class="p-4 flex-grow flex flex-col">
+                        <h3 class="font-bold text-lg text-slate-800 mb-1 line-clamp-1">${item.title}</h3>
+                        <p class="text-slate-500 text-sm mb-3"><i class="fa-solid fa-location-dot"></i> ${item.location}</p>
+                        <div class="mt-auto pt-3 border-t border-slate-100 flex justify-between items-center text-xs text-slate-400"><span>拾獲日: ${item.date}</span></div>
+                    </div>
+                </div>`;
+            });
+            listHTML += `</div></div>`;
+            return listHTML;
+        }
+
+        function renderItemDetail() {
+            const item = window.state.foundItems.find(i => i.id === window.state.selectedItemId);
+            if (!item) return `<div class="text-center py-16 text-slate-500">找不到該物品，可能已被刪除。</div>`;
+            const isAdmin = window.state.activeRole === 'admin';
+            let statusColor = "bg-amber-100 text-amber-800 border-amber-200";
+            if (item.status === "審核中") statusColor = "bg-blue-100 text-blue-800 border-blue-200";
+            if (item.status === "待領取") statusColor = "bg-green-100 text-green-800 border-green-200";
+            if (item.status === "已結案") statusColor = "bg-slate-100 text-slate-600 border-slate-200";
+
+            let html = `
+            <div class="max-w-4xl mx-auto px-4 py-8 fade-enter-active">
+                <button onclick="window.navigate('home')" class="mb-4 text-slate-500 hover:text-emerald-600 font-bold transition flex items-center gap-2 outline-none"><i class="fa-solid fa-arrow-left"></i> 返回列表</button>
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col md:flex-row">
+                    <div class="md:w-1/2 bg-slate-100 relative"><img src="${item.image}" alt="${item.title}" class="w-full h-full object-cover min-h-[300px]"><div class="absolute top-4 left-4 px-3 py-1 rounded-full text-sm font-bold shadow-md border ${statusColor}">${item.status}</div></div>
+                    <div class="md:w-1/2 p-6 md:p-8 flex flex-col">
+                        <div class="flex justify-between items-start mb-2"><h2 class="text-2xl font-black text-slate-800">${item.title}</h2>
+                        ${isAdmin ? `<button onclick="window.deleteItem(event, '${item.id}', '${item.title}')" class="text-slate-400 hover:text-red-600 bg-slate-50 hover:bg-red-50 p-2 rounded-lg transition" title="刪除此案件"><i class="fa-solid fa-trash"></i></button>` : ''}</div>
+                        <p class="text-slate-500 text-sm mb-6 flex items-center gap-2"><i class="fa-solid fa-tag"></i> ${item.category}</p>
+                        <div class="space-y-4 flex-grow mb-8">
+                            <div class="bg-slate-50 p-4 rounded-xl border border-slate-100 grid grid-cols-2 gap-4 text-sm">
+                                <div><span class="text-slate-400 block mb-1">拾獲地點</span><span class="font-bold text-slate-700">${item.location}</span></div>
+                                <div><span class="text-slate-400 block mb-1">拾獲日期</span><span class="font-bold text-slate-700">${item.date}</span></div>
+                            </div>
+                            <div><h3 class="text-sm font-bold text-slate-700 mb-2">公開描述</h3><p class="text-slate-600 text-sm leading-relaxed">${item.description}</p></div>
+                            ${isAdmin ? `<div class="bg-red-50 border border-red-100 p-3 rounded-lg mt-4"><h3 class="text-sm font-bold text-red-800 mb-1"><i class="fa-solid fa-user-shield"></i> 管理員視角：隱藏特徵</h3><p class="text-red-700 text-sm">${item.hiddenFeature || '未填寫'}</p></div>` : ''}
+                        </div>
+            `;
+            if (item.status === "待認領" || item.status === "二手贈送") {
+                if (!window.state.user) {
+                    html += `<div class="bg-amber-50 border border-amber-200 rounded-xl p-4 text-center"><p class="text-amber-800 text-sm mb-3">登入龍華 Google 帳號即可申請認領</p><button onclick="window.loginWithGoogle()" class="bg-amber-500 hover:bg-amber-600 text-white font-bold py-2.5 px-6 rounded-lg transition w-full">立即登入</button></div>`;
+                } else {
+                    html += `
+                    <form onsubmit="window.handleClaimAction(event, '${item.id}', 'submit')" class="bg-emerald-50 border border-emerald-100 p-4 rounded-xl space-y-3">
+                        <h3 class="font-bold text-emerald-800 mb-2">申請認領</h3>
+                        <div><label for="claim-contact" class="block text-sm font-bold text-emerald-800 mb-1">聯絡電話 <span class="text-red-500">*</span></label><input type="text" id="claim-contact" name="contact" required placeholder="請留下聯絡電話" autocomplete="tel" inputmode="tel" class="w-full text-base md:text-sm border-emerald-200 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-emerald-500 outline-none transition"><p class="text-xs text-emerald-600 mt-1">* 審核通過後系辦將以此聯繫您</p></div>
+                        <div><label for="claim-answer" class="block text-sm font-bold text-emerald-800 mb-1">特徵描述 <span class="text-red-500">*</span></label><input type="text" id="claim-answer" name="answer" required placeholder="請描述物品的隱藏特徵 (如:內容物)" class="w-full text-base md:text-sm border-emerald-200 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-emerald-500 outline-none transition"></div>
+                        <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg transition mt-2 shadow-sm">送出申請</button>
+                    </form>`;
+                }
+            } else if (item.status === "審核中") { html += `<div class="bg-blue-50 text-blue-700 text-center py-4 rounded-xl font-bold border border-blue-200"><i class="fa-solid fa-hourglass-half"></i> 物品審核中</div>`;
+            } else if (item.status === "待領取") { 
+                html += `<div class="bg-green-50 text-green-700 text-center py-4 rounded-xl font-bold border border-green-200 mb-3"><i class="fa-solid fa-check-circle"></i> 已核准！請至系辦領取</div>`;
+                if (isAdmin) html += `<button onclick="window.markItemClosed(event, '${item.id}', '${item.title}')" class="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 rounded-lg transition shadow-md"><i class="fa-solid fa-box-archive"></i> 失主已領取，點此歸檔結案</button>`;
+            } else if (item.status === "已結案") { html += `<div class="bg-slate-100 text-slate-500 text-center py-4 rounded-xl font-bold border border-slate-200"><i class="fa-solid fa-lock"></i> 此案件已結束</div>`; }
+            html += `</div></div></div>`;
+            return html;
+        }
+
+        function renderAddItem() {
+            if (window.state.activeRole !== 'admin') return `<div class="py-16 text-center"><h3 class="text-xl font-bold text-slate-600">權限不足</h3></div>`;
+            return `
+            <div class="max-w-3xl mx-auto px-4 py-8 fade-enter-active">
+                <div class="bg-blue-50 border border-blue-200 rounded-xl p-5 mb-6 shadow-sm">
+                    <h2 class="font-bold text-blue-800 mb-3 flex items-center gap-2 text-lg"><i class="fa-solid fa-shield-halved text-blue-600"></i> 建檔標準作業程序 (S.O.P.)</h2>
+                    <ul class="text-sm text-blue-700 space-y-2 list-disc list-inside">
+                        <li><strong>照片個資保護：</strong> 若為身分證，請在拍照時<span class="text-red-600 font-bold">物理遮蔽</span>字號。</li>
+                        <li><strong>設定隱藏特徵：</strong> 請設定一個<span class="font-bold underline">只有真正失主才會知道的細節</span>防冒領。</li>
+                    </ul>
+                </div>
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div class="bg-slate-800 px-6 py-4"><h2 class="text-white text-xl font-bold">新增拾獲物</h2></div>
+                    <div class="p-6">
+                        <form onsubmit="window.submitNewItem(event)" class="space-y-4">
+                            <div>
+                                <label for="item-image" class="block text-sm font-bold text-slate-700 mb-1 cursor-pointer">物品照片 <span class="text-slate-400 font-normal text-xs ml-1">(最大 5MB)</span></label>
+                                <div class="border-2 border-dashed border-slate-300 rounded-xl p-4 text-center hover:bg-slate-50 transition relative">
+                                    <input type="file" id="item-image" accept="image/jpeg, image/png, image/webp" required class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onchange="const f=this.files[0]; if(f){ document.getElementById('preview-container').classList.remove('hidden'); document.getElementById('upload-placeholder').classList.add('hidden'); document.getElementById('image-preview').src=URL.createObjectURL(f);}">
+                                    <div id="upload-placeholder" class="py-4 pointer-events-none"><i class="fa-solid fa-cloud-arrow-up text-4xl text-emerald-500 mb-2"></i><p class="text-slate-600 font-bold">點擊上傳照片 (真實上傳)</p></div>
+                                    <div id="preview-container" class="hidden relative w-full max-w-sm mx-auto h-48 rounded-lg overflow-hidden border border-slate-200 shadow-sm"><img id="image-preview" class="w-full h-full object-cover"><button type="button" onclick="document.getElementById('item-image').value=''; document.getElementById('preview-container').classList.add('hidden'); document.getElementById('upload-placeholder').classList.remove('hidden');" class="absolute top-2 right-2 bg-red-500 text-white w-8 h-8 rounded-full shadow-md"><i class="fa-solid fa-times"></i></button></div>
+                                </div>
+                            </div>
+                            <div><label for="item-title" class="block text-sm font-bold text-slate-700 mb-1">物品名稱 <span class="text-red-500">*</span></label><input type="text" id="item-title" name="title" required class="w-full border rounded-lg px-4 py-2.5 text-base md:text-sm focus:ring-2 focus:ring-emerald-500 outline-none"></div>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div><label for="item-location" class="block text-sm font-bold text-slate-700 mb-1">拾獲地點 <span class="text-red-500">*</span></label><input type="text" id="item-location" name="location" required class="w-full border rounded-lg px-4 py-2.5 text-base md:text-sm focus:ring-2 focus:ring-emerald-500 outline-none"></div>
+                                <div><label for="item-date" class="block text-sm font-bold text-slate-700 mb-1">拾獲日期 <span class="text-red-500">*</span></label><input type="date" id="item-date" name="date" required class="w-full border rounded-lg px-4 py-2.5 text-base md:text-sm focus:ring-2 focus:ring-emerald-500 outline-none"></div>
+                            </div>
+                            <div><label for="item-category" class="block text-sm font-bold text-slate-700 mb-1">物品分類 <span class="text-red-500">*</span></label>
+                                <select id="item-category" name="categorySelect" required onchange="window.toggleCustomCategory(this.value)" class="w-full border rounded-lg px-4 py-2.5 text-base md:text-sm focus:ring-2 focus:ring-emerald-500 outline-none"><option value="" disabled selected>請選擇分類</option><option value="3C電子">3C電子</option><option value="證件錢包">證件錢包</option><option value="書籍文具">書籍文具</option><option value="生活用品">生活用品</option><option value="其他">其他 (自行填寫)</option></select>
+                                <div id="custom-category-container" style="display: none;" class="mt-2"><input type="text" id="custom-category-input" name="customCategory" class="w-full border border-emerald-300 bg-emerald-50 rounded-lg px-4 py-2.5 text-base md:text-sm outline-none"></div>
+                            </div>
+                            <div><label for="item-description" class="block text-sm font-bold text-slate-700 mb-1">公開描述 <span class="text-red-500">*</span></label><textarea id="item-description" name="description" required rows="2" class="w-full border rounded-lg px-4 py-2.5 text-base md:text-sm focus:ring-2 outline-none"></textarea></div>
+                            <div><label for="item-hidden" class="block text-sm font-bold text-slate-700 mb-1 text-red-600">隱藏特徵 (防冒領專用) <span class="text-red-500">*</span></label><input type="text" id="item-hidden" name="hiddenFeature" required class="w-full border-red-200 bg-red-50 rounded-lg px-4 py-2.5 text-base md:text-sm focus:ring-2 focus:ring-red-500 outline-none"></div>
+                            <button type="submit" id="submit-btn" class="w-full bg-emerald-600 text-white font-bold py-3 rounded-lg shadow-md hover:bg-emerald-700 transition mt-6">寫入資料庫</button>
+                        </form>
+                    </div>
+                </div>
+            </div>`;
+        }
+
+        function renderAdminDashboard() {
+            if (window.state.activeRole !== 'admin') return '';
+            let auditsHTML = `
+            <div class="max-w-6xl mx-auto px-4 py-8 fade-enter-active">
+                <div class="mb-6"><h2 class="text-2xl font-black text-slate-800">案件管理中心</h2></div>
+                <div class="bg-slate-100 border border-slate-200 rounded-xl p-5 mb-8 shadow-sm">
+                    <h3 class="font-bold text-slate-800 mb-2 flex items-center gap-2"><i class="fa-solid fa-scale-balanced text-slate-600"></i> 申請審核與放行原則</h3>
+                    <ul class="text-sm text-slate-600 space-y-1.5 list-disc list-inside">
+                        <li>比對學生填寫的「作答答案」與當初建檔的「隱藏特徵」是否吻合。</li>
+                        <li>若核准，物品將進入「待領取」；若駁回，申請作廢並退回大廳。</li>
+                    </ul>
+                </div><div class="space-y-4">`;
+            
+            let hasAudits = false;
+            window.state.foundItems.forEach(item => {
+                if (item.status === '審核中' && item.claimRequests) {
+                    item.claimRequests.filter(req => req.status === '待審核').forEach(req => {
+                        hasAudits = true;
+                        auditsHTML += `
+                        <div class="bg-white border border-slate-200 shadow-sm rounded-xl p-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 hover:shadow-md">
+                            <div class="flex-grow">
+                                <div class="flex items-center gap-2 mb-1"><h4 class="font-bold text-slate-800 text-lg">${item.title}</h4></div>
+                                <div class="bg-blue-50 border border-blue-100 p-3 rounded-lg mt-3 text-sm">
+                                    <p class="text-slate-500 mb-1">建檔特徵：<span class="font-bold text-slate-700">${item.hiddenFeature || '無紀錄'}</span></p>
+                                    <p class="text-blue-800 font-medium">學生作答：${req.answer || '無 (二手索取)'}</p>
+                                </div>
+                                <p class="text-sm text-slate-500 mt-3 flex items-center gap-2"><i class="fa-solid fa-user"></i> ${req.studentName} | <i class="fa-solid fa-phone"></i> ${req.contact || '無'}</p>
+                            </div>
+                            <div class="flex gap-2 w-full md:w-auto shrink-0 border-t md:border-t-0 pt-4 md:pt-0 border-slate-100">
+                                <button onclick="window.handleClaimAction(event, '${item.id}', '${req.requestId}', 'reject')" class="w-full md:w-auto px-5 py-2.5 border border-red-200 text-red-600 bg-white hover:bg-red-50 rounded-lg font-bold transition">駁回</button>
+                                <button onclick="window.handleClaimAction(event, '${item.id}', '${req.requestId}', 'approve')" class="w-full md:w-auto px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold transition">核准</button>
+                            </div>
+                        </div>`;
+                    });
+                }
+            });
+            if (!hasAudits) auditsHTML += `<div class="text-center py-16 bg-white border border-slate-200 rounded-xl"><i class="fa-solid fa-inbox text-5xl text-slate-200 mb-3"></i><p class="text-slate-500 font-medium">目前無待處理的申請</p></div>`;
+            auditsHTML += `</div></div>`;
+            return auditsHTML;
+        }
+
+        function renderLostList() {
+            const isAdmin = window.state.activeRole === 'admin';
+            let listHTML = `
+            <div class="max-w-6xl mx-auto px-4 py-8 fade-enter-active">
+                <div class="flex justify-between items-center mb-6"><h2 class="text-2xl font-black text-slate-800">遺失協尋大廳</h2><button onclick="window.navigate('add_lost')" class="bg-amber-500 text-white px-5 py-2.5 rounded-lg font-bold shadow-md hover:bg-amber-600 transition flex items-center gap-2"><i class="fa-solid fa-bullhorn"></i> <span class="hidden sm:inline">發布協尋</span></button></div>
+                <div class="mb-8 bg-amber-50 border border-amber-200 rounded-xl p-5 shadow-sm">
+                    <h3 class="font-bold text-amber-800 mb-2 flex items-center gap-2 text-lg"><i class="fa-solid fa-handshake-angle text-amber-600"></i> 互助協尋發布規則</h3>
+                    <ul class="list-disc list-inside text-sm text-amber-700 space-y-1.5">
+                        <li>為保護隱私，<strong class="text-red-600">請勿填寫完整的身分證字號或過於私密的個資</strong>。</li>
+                        <li>若物品已幸運找回，請發文者務必回來點擊<strong>「標記尋獲」</strong>。</li>
+                    </ul>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            `;
+            if (window.state.lostItems.length === 0) listHTML += `<div class="col-span-full py-16 text-center text-slate-500">目前沒有同學發布遺失協尋。</div>`;
+            window.state.lostItems.forEach(item => {
+                const canEdit = (window.state.user && window.state.user.uid === item.userId) || isAdmin;
+                listHTML += `
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col hover:shadow-md transition ${item.status === '已尋獲' ? 'opacity-60 grayscale-[20%]' : ''}">
+                    <div class="bg-amber-50 px-5 py-3 border-b border-amber-100 flex justify-between items-center"><span class="text-amber-800 font-bold text-sm"><i class="fa-regular fa-clock"></i> ${item.date} 遺失</span><span class="px-2.5 py-1 rounded text-xs font-bold text-white shadow-sm ${item.status === '已尋獲' ? 'bg-green-500' : 'bg-amber-500'}">${item.status}</span></div>
+                    <div class="p-5 flex-grow"><h3 class="font-bold text-lg mb-2 text-slate-800">${item.title}</h3><p class="text-slate-500 text-sm mb-4"><i class="fa-solid fa-location-dot"></i> ${item.location}</p><div class="bg-slate-50 p-3 rounded-lg text-sm text-slate-600 mb-4 whitespace-pre-wrap">${item.description}</div></div>
+                    ${canEdit ? `<div class="px-5 py-3 bg-slate-50 border-t border-slate-100 flex justify-between items-center">
+                        ${item.status !== '已尋獲' ? `<button onclick="window.markLostItemFound(event, '${item.id}')" class="text-green-600 font-bold text-sm">標記為已尋獲</button>` : '<span class="text-slate-400 text-sm font-medium">案件已結束</span>'}
+                        ${isAdmin ? `<button onclick="window.deleteLostItem(event, '${item.id}', '${item.title}')" class="text-red-500 font-bold text-sm"><i class="fa-solid fa-trash"></i></button>` : ''}
+                    </div>` : ''}
+                </div>`;
+            });
+            listHTML += `</div></div>`;
+            return listHTML;
+        }
+
+        function renderAddLostItem() {
+            if (!window.state.user) return `<div class="py-20 text-center"><i class="fa-solid fa-lock text-5xl text-slate-200 mb-4"></i><h3 class="text-xl font-bold text-slate-600 mb-4">請先登入再發布協尋</h3><button onclick="window.loginWithGoogle()" class="bg-amber-500 hover:bg-amber-600 transition text-white px-8 py-3 rounded-xl font-bold shadow-md">使用 Google 登入</button></div>`;
+            return `
+            <div class="max-w-2xl mx-auto px-4 py-8 fade-enter-active">
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div class="bg-amber-500 px-6 py-4 flex justify-between items-center"><h2 class="text-white text-xl font-bold">發布遺失協尋</h2><button onclick="window.navigate('lost_list')" class="text-amber-100"><i class="fa-solid fa-times text-xl"></i></button></div>
+                    <div class="p-6">
+                        <div class="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 flex gap-3"><i class="fa-solid fa-triangle-exclamation text-red-500 text-lg mt-0.5"></i><div class="text-sm text-red-800"><strong class="block mb-1">隱私與安全警告</strong>協尋文章為公開，<span class="underline font-bold">絕對不要</span>填寫身分證字號等敏感資料。</div></div>
+                        <form onsubmit="window.submitNewLostItem(event)" class="space-y-4">
+                            <div><label for="lost-title" class="block text-sm font-bold text-slate-700 mb-1">物品名稱 <span class="text-red-500">*</span></label><input type="text" id="lost-title" name="title" required class="w-full border rounded-lg px-4 py-2.5 text-base md:text-sm focus:ring-2 outline-none"></div>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div><label for="lost-location" class="block text-sm font-bold text-slate-700 mb-1">最後發現地點 <span class="text-red-500">*</span></label><input type="text" id="lost-location" name="location" required class="w-full border rounded-lg px-4 py-2.5 text-base md:text-sm focus:ring-2 outline-none"></div>
+                                <div><label for="lost-date" class="block text-sm font-bold text-slate-700 mb-1">遺失日期 <span class="text-red-500">*</span></label><input type="date" id="lost-date" name="date" required class="w-full border rounded-lg px-4 py-2.5 text-base md:text-sm focus:ring-2 outline-none"></div>
+                            </div>
+                            <div><label for="lost-description" class="block text-sm font-bold text-slate-700 mb-1">詳細特徵描述 <span class="text-red-500">*</span></label><textarea id="lost-description" name="description" required rows="3" class="w-full border rounded-lg px-4 py-2.5 text-base md:text-sm focus:ring-2 outline-none"></textarea></div>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div><label for="lost-studentName" class="block text-sm font-bold text-slate-700 mb-1">發布者</label><input type="text" id="lost-studentName" value="${window.state.user.displayName}" disabled class="w-full border rounded-lg px-4 py-2.5 text-base md:text-sm bg-slate-50 text-slate-500"></div>
+                                <div><label for="lost-contact" class="block text-sm font-bold text-slate-700 mb-1">聯絡電話 <span class="text-red-500">*</span></label><input type="text" id="lost-contact" name="contact" required inputmode="tel" class="w-full border rounded-lg px-4 py-2.5 text-base md:text-sm focus:ring-2 outline-none"></div>
+                            </div>
+                            <button type="submit" id="submit-lost-btn" class="w-full bg-amber-500 hover:bg-amber-600 transition text-white font-bold py-3 rounded-lg mt-6 shadow-md text-lg">發布協尋文章</button>
+                        </form>
+                    </div>
+                </div>
+            </div>`;
+        }
+
+        function renderSecondHandList() {
+            const today = new Date().toISOString().split('T')[0];
+            let ecoItems = window.state.foundItems.filter(item => (item.expiresAt && item.expiresAt < today && item.status === '待認領') || item.status === '二手贈送');
+
+            let listHTML = `
+            <div class="max-w-6xl mx-auto px-4 py-8 fade-enter-active">
+                <h2 class="text-2xl font-black text-green-800 mb-6">二手免費贈送專區</h2>
+                <div class="mb-8 bg-green-50 border border-green-200 rounded-xl p-5 shadow-sm">
+                    <h3 class="font-bold text-green-800 mb-2 flex items-center gap-2 text-lg"><i class="fa-solid fa-leaf text-green-600"></i> 綠色永續 ‧ 資源循環規則</h3>
+                    <ul class="list-disc list-inside text-sm text-green-700 space-y-1.5 leading-relaxed">
+                        <li>本區皆為保管超過 30 天無人認領之一般物品。</li>
+                        <li>全系師生皆可免費申請索取，落實校園資源循環。</li>
+                    </ul>
+                </div>`;
+                
+            if (ecoItems.length === 0) return listHTML + `<div class="text-center py-16 bg-white border border-slate-200 rounded-xl"><i class="fa-solid fa-seedling text-5xl text-slate-200 mb-4"></i><h3 class="text-xl font-bold text-slate-600">目前沒有二手物品</h3></div></div>`;
+
+            listHTML += `<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">`;
+            ecoItems.forEach(item => {
+                listHTML += `
+                <div class="bg-white rounded-xl shadow-sm border border-green-200 overflow-hidden flex flex-col h-full hover:shadow-md transition">
+                    <div class="h-48 relative overflow-hidden bg-slate-100"><img src="${item.image}" alt="${item.title}" class="w-full h-full object-cover"><div class="absolute top-3 left-3 bg-green-500 text-white text-xs font-bold px-2 py-1 rounded shadow-sm"><i class="fa-solid fa-recycle"></i> 免費索取</div></div>
+                    <div class="p-5 flex flex-col flex-grow"><h3 class="font-bold text-lg text-slate-800 mb-2">${item.title}</h3><p class="text-sm text-slate-500 mb-4 line-clamp-2">${item.description}</p>
+                    <button onclick="window.requestSecondHand(event, '${item.id}')" class="mt-auto w-full bg-green-50 hover:bg-green-100 transition text-green-700 font-bold py-2.5 rounded-lg border border-green-200 shadow-sm">登記索取</button></div>
+                </div>`;
+            });
+            listHTML += `</div></div>`;
+            return listHTML;
+        }
+
+        function renderNavigation() {
+            const isAdmin = window.state.activeRole === 'admin';
+            let html = `<div class="flex gap-1 md:gap-4 overflow-x-auto no-scrollbar py-2" role="navigation">
+                <button onclick="window.navigate('home')" class="whitespace-nowrap px-4 py-2.5 rounded-lg font-bold text-sm ${['home','item_detail'].includes(window.state.currentView) ? 'bg-emerald-100 text-emerald-800 shadow-sm' : 'text-slate-500 hover:bg-slate-100 transition'}"><i class="fa-solid fa-magnifying-glass mr-1.5"></i> 尋找失物</button>
+                <button onclick="window.navigate('lost_list')" class="whitespace-nowrap px-4 py-2.5 rounded-lg font-bold text-sm ${['lost_list','add_lost'].includes(window.state.currentView) ? 'bg-amber-100 text-amber-800 shadow-sm' : 'text-slate-500 hover:bg-slate-100 transition'}"><i class="fa-solid fa-bullhorn mr-1.5"></i> 遺失協尋</button>
+                <button onclick="window.navigate('second_hand')" class="whitespace-nowrap px-4 py-2.5 rounded-lg font-bold text-sm ${window.state.currentView === 'second_hand' ? 'bg-green-100 text-green-800 shadow-sm' : 'text-slate-500 hover:bg-slate-100 transition'}"><i class="fa-solid fa-leaf mr-1.5"></i> 二手贈送</button>
+            `;
+            if (isAdmin) {
+                html += `<div class="w-px bg-slate-200 mx-1 md:mx-2 hidden sm:block"></div>
+                <button onclick="window.navigate('add_item')" class="whitespace-nowrap px-4 py-2.5 rounded-lg font-bold text-sm ${window.state.currentView === 'add_item' ? 'bg-blue-100 text-blue-800 shadow-sm' : 'text-slate-500 hover:bg-slate-100 transition'}"><i class="fa-solid fa-plus-circle mr-1.5 text-blue-500"></i> 新增拾獲物</button>
+                <button onclick="window.navigate('admin_dashboard')" class="whitespace-nowrap px-4 py-2.5 rounded-lg font-bold text-sm ${['admin_dashboard'].includes(window.state.currentView) ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100 transition'}"><i class="fa-solid fa-folder-open mr-1.5"></i> 案件管理</button>`;
+            }
+            return html + `</div>`;
+        }
+
+        window.render = function() {
+            const activeEl = document.activeElement; const activeId = activeEl ? activeEl.id : null;
+            let selectionStart = null, selectionEnd = null;
+            if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')) {
+                try { selectionStart = activeEl.selectionStart; selectionEnd = activeEl.selectionEnd; } catch(e) {}
+            }
+
+            const main = document.getElementById('main-content');
+            const auth = document.getElementById('auth-container');
+            
+            if (window.state.user) {
+                auth.innerHTML = `<div class="flex items-center gap-3 fade-enter-active"><div class="text-right hidden sm:block"><div class="text-sm font-bold text-slate-700">${window.state.user.displayName}</div></div><img src="${window.state.user.photoURL}" class="w-9 h-9 rounded-full border-2 border-emerald-100 shadow-sm"><button onclick="window.logout()" aria-label="登出" class="text-slate-400 hover:text-red-500 bg-slate-100 hover:bg-red-50 w-9 h-9 flex items-center justify-center rounded-full transition"><i class="fa-solid fa-right-from-bracket"></i></button></div>`;
+            } else {
+                auth.innerHTML = `<button onclick="window.loginWithGoogle()" class="bg-white border border-slate-200 text-slate-700 font-bold py-2 px-5 rounded-lg shadow-sm text-sm hover:bg-slate-50 transition flex items-center gap-2"><i class="fab fa-google text-slate-400"></i><span class="hidden sm:inline">登入</span></button>`;
+            }
+            document.getElementById('nav-container').innerHTML = renderNavigation();
+
+            if (window.state.isInitialLoading) {
+                main.innerHTML = `<div class="max-w-6xl mx-auto px-4 py-8 animate-pulse"><div class="h-8 bg-slate-200 rounded w-48 mb-6"></div><div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"><div class="bg-white rounded-xl border border-slate-100 shadow-sm h-72"></div><div class="bg-white rounded-xl border border-slate-100 shadow-sm h-72 hidden md:block"></div></div></div>`;
+            } else if (window.state.isLoadingError) {
+                main.innerHTML = `<div class="py-24 text-center"><i class="fa-solid fa-wifi text-6xl text-slate-300 mb-4"></i><h3 class="text-xl font-bold text-slate-700 mb-2">資料連線失敗</h3><button onclick="window.loadDataFromCloud()" class="bg-slate-800 hover:bg-slate-900 transition text-white font-bold py-2.5 px-6 rounded-lg mt-4">重新連線</button></div>`;
+            } else {
+                const views = { 'home': renderFoundList, 'add_item': renderAddItem, 'item_detail': renderItemDetail, 'admin_dashboard': renderAdminDashboard, 'lost_list': renderLostList, 'add_lost': renderAddLostItem, 'second_hand': renderSecondHandList };
+                main.innerHTML = (views[window.state.currentView] || renderFoundList)();
+            }
+
+            if (activeId) {
+                const restoredEl = document.getElementById(activeId);
+                if (restoredEl) {
+                    restoredEl.focus();
+                    if (selectionStart !== null) { try { restoredEl.setSelectionRange(selectionStart, selectionEnd); } catch(e) {} }
+                }
+            }
+        };
+
+        window.onload = function() {
+            const ua = navigator.userAgent || navigator.vendor || window.opera;
+            if (ua.indexOf('Line') > -1 || ua.indexOf('FBAV') > -1 || ua.indexOf('Instagram') > -1) {
+                const warningBanner = document.getElementById('in-app-warning');
+                if(warningBanner) warningBanner.classList.remove('hidden');
+            }
+            window.render();
+            window.loadDataFromCloud(); // 啟動 Firebase 監聽
+            
+            window.addEventListener('scroll', () => {
+                const fab = document.getElementById('back-to-top');
+                if (!fab) return;
+                if (window.scrollY > 300) { fab.classList.remove('opacity-0', 'pointer-events-none', 'translate-y-4'); fab.classList.add('opacity-100', 'translate-y-0'); } 
+                else { fab.classList.add('opacity-0', 'pointer-events-none', 'translate-y-4'); fab.classList.remove('opacity-100', 'translate-y-0'); }
+            });
+        };
+    </script>
+</body>
+</html>
